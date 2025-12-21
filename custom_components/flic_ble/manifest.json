@@ -1,0 +1,16 @@
+{
+  "domain": "flic_ble",
+  "name": "Flic Button (BLE)",
+  "config_flow": true,
+  "bluetooth": [
+    {
+      "service_uuid": "00420000-8f59-4420-870d-84f3b617e493",
+      "connectable": true
+    }
+  ],
+  "requirements": [],
+  "dependencies": ["bluetooth"],
+  "documentation": "https://github.com/50ButtonsEach/flic2-documentation",
+  "iot_class": "local_push",
+  "version": "0.1.0"
+}

@@ -1,0 +1,112 @@
+blueprint:
+  name: Flic Button - Multi Action
+  description: |
+    Advanced Flic button automation with customizable actions for each press type.
+
+    Configure different actions for:
+    - **Single press**
+    - **Double press**
+    - **Long press**
+    - **Long press release** (optional)
+
+    Perfect for controlling multiple devices or triggering complex scenes.
+
+  domain: automation
+
+  input:
+    flic_button:
+      name: Flic Button
+      description: The Flic button to use
+      selector:
+        device:
+          integration: flic_ble
+
+    single_press_action:
+      name: Single Press Action
+      description: Action to perform on single press
+      default: []
+      selector:
+        action:
+
+    double_press_action:
+      name: Double Press Action
+      description: Action to perform on double press
+      default: []
+      selector:
+        action:
+
+    long_press_action:
+      name: Long Press Action
+      description: Action to perform on long press (hold)
+      default: []
+      selector:
+        action:
+
+    enable_long_release:
+      name: Enable Long Press Release
+      description: Enable action when long press is released
+      default: false
+      selector:
+        boolean:
+
+    long_release_action:
+      name: Long Press Release Action
+      description: Action to perform when long press is released
+      default: []
+      selector:
+        action:
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_short_press
+    id: single_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_double_press
+    id: double_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_long_press
+    id: long_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_long_release
+    id: long_release
+    enabled: !input enable_long_release
+
+action:
+  - choose:
+      # Single press
+      - conditions:
+          - condition: trigger
+            id: single_press
+        sequence: !input single_press_action
+
+      # Double press
+      - conditions:
+          - condition: trigger
+            id: double_press
+        sequence: !input double_press_action
+
+      # Long press
+      - conditions:
+          - condition: trigger
+            id: long_press
+        sequence: !input long_press_action
+
+      # Long release
+      - conditions:
+          - condition: trigger
+            id: long_release
+        sequence: !input long_release_action

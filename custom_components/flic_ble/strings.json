@@ -1,0 +1,42 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select Flic Button",
+        "description": "Select a Flic button to add",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "select_device": {
+        "title": "Select Flic Button",
+        "description": "Found {count} Flic buttons. Select one to add:",
+        "data": {
+          "device": "Device"
+        }
+      },
+      "bluetooth_confirm": {
+        "title": "Confirm Flic Button",
+        "description": "Do you want to add {name}?"
+      }
+    },
+    "error": {
+      "bluetooth_not_available": "Bluetooth is not available on this system",
+      "no_devices_found": "No Flic buttons found. Make sure your button is nearby and in pairing mode."
+    },
+    "abort": {
+      "already_configured": "This Flic button is already configured",
+      "bluetooth_not_available": "Bluetooth is not available",
+      "no_devices_found": "No Flic buttons found"
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "button_short_press": "Short press",
+      "button_double_press": "Double press",
+      "button_long_press": "Long press",
+      "button_short_release": "Short release",
+      "button_long_release": "Long release"
+    }
+  }
+}

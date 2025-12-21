@@ -1,0 +1,232 @@
+blueprint:
+  name: Flic Button - Media Controller
+  description: |
+    Control media players with a Flic button.
+
+    - **Single press**: Play/Pause
+    - **Double press**: Next track
+    - **Long press**: Volume up (while held)
+    - **Long press release**: Stop volume adjustment
+
+    Perfect for controlling music, TV, or any media player from anywhere.
+
+  domain: automation
+
+  input:
+    flic_button:
+      name: Flic Button
+      description: The Flic button to use
+      selector:
+        device:
+          integration: flic_ble
+
+    media_player:
+      name: Media Player
+      description: The media player to control
+      selector:
+        entity:
+          domain: media_player
+
+    single_press_action:
+      name: Single Press Action
+      description: What should single press do?
+      default: play_pause
+      selector:
+        select:
+          options:
+            - label: Play/Pause
+              value: play_pause
+            - label: Play
+              value: play
+            - label: Pause
+              value: pause
+            - label: Stop
+              value: stop
+
+    double_press_action:
+      name: Double Press Action
+      description: What should double press do?
+      default: next_track
+      selector:
+        select:
+          options:
+            - label: Next Track
+              value: next_track
+            - label: Previous Track
+              value: previous_track
+            - label: Volume Up
+              value: volume_up
+            - label: Volume Down
+              value: volume_down
+
+    long_press_action:
+      name: Long Press Action
+      description: What should long press do?
+      default: volume_up
+      selector:
+        select:
+          options:
+            - label: Volume Up (continuous)
+              value: volume_up
+            - label: Volume Down (continuous)
+              value: volume_down
+            - label: Mute/Unmute
+              value: mute
+
+    volume_step:
+      name: Volume Step
+      description: Volume change per step (0.0 to 1.0)
+      default: 0.05
+      selector:
+        number:
+          min: 0.01
+          max: 0.2
+          step: 0.01
+          mode: slider
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_short_press
+    id: single_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_double_press
+    id: double_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_long_press
+    id: long_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_long_release
+    id: long_release
+
+variables:
+  player: !input media_player
+  step: !input volume_step
+
+action:
+  - choose:
+      # Single press
+      - conditions:
+          - condition: trigger
+            id: single_press
+        sequence:
+          - choose:
+              - conditions: "{{ single_press_action == 'play_pause' }}"
+                sequence:
+                  - service: media_player.media_play_pause
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ single_press_action == 'play' }}"
+                sequence:
+                  - service: media_player.media_play
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ single_press_action == 'pause' }}"
+                sequence:
+                  - service: media_player.media_pause
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ single_press_action == 'stop' }}"
+                sequence:
+                  - service: media_player.media_stop
+                    target:
+                      entity_id: "{{ player }}"
+
+      # Double press
+      - conditions:
+          - condition: trigger
+            id: double_press
+        sequence:
+          - choose:
+              - conditions: "{{ double_press_action == 'next_track' }}"
+                sequence:
+                  - service: media_player.media_next_track
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ double_press_action == 'previous_track' }}"
+                sequence:
+                  - service: media_player.media_previous_track
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ double_press_action == 'volume_up' }}"
+                sequence:
+                  - service: media_player.volume_up
+                    target:
+                      entity_id: "{{ player }}"
+
+              - conditions: "{{ double_press_action == 'volume_down' }}"
+                sequence:
+                  - service: media_player.volume_down
+                    target:
+                      entity_id: "{{ player }}"
+
+      # Long press - continuous volume adjust
+      - conditions:
+          - condition: trigger
+            id: long_press
+        sequence:
+          - choose:
+              - conditions: "{{ long_press_action == 'volume_up' }}"
+                sequence:
+                  - repeat:
+                      while:
+                        - condition: template
+                          value_template: "{{ true }}"
+                      sequence:
+                        - service: media_player.volume_set
+                          target:
+                            entity_id: "{{ player }}"
+                          data:
+                            volume_level: >
+                              {{ [1.0, state_attr(player, 'volume_level') | float(0) + step] | min }}
+                        - delay:
+                            milliseconds: 200
+
+              - conditions: "{{ long_press_action == 'volume_down' }}"
+                sequence:
+                  - repeat:
+                      while:
+                        - condition: template
+                          value_template: "{{ true }}"
+                      sequence:
+                        - service: media_player.volume_set
+                          target:
+                            entity_id: "{{ player }}"
+                          data:
+                            volume_level: >
+                              {{ [0.0, state_attr(player, 'volume_level') | float(0) - step] | max }}
+                        - delay:
+                            milliseconds: 200
+
+              - conditions: "{{ long_press_action == 'mute' }}"
+                sequence:
+                  - service: media_player.volume_mute
+                    target:
+                      entity_id: "{{ player }}"
+                    data:
+                      is_volume_muted: true
+
+      # Long release - stop continuous action
+      - conditions:
+          - condition: trigger
+            id: long_release
+        sequence:
+          - stop: "Released"

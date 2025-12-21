@@ -1,0 +1,162 @@
+blueprint:
+  name: Flic Button - Scene Controller
+  description: |
+    Use a Flic button to cycle through scenes or control brightness.
+
+    - **Single press**: Cycle through up to 4 scenes
+    - **Double press**: Jump to favorite scene (optional)
+    - **Long press**: Turn off all lights (optional)
+
+    Perfect for bedside lamps, living room lighting, or any multi-scene setup.
+
+  domain: automation
+
+  input:
+    flic_button:
+      name: Flic Button
+      description: The Flic button to use
+      selector:
+        device:
+          integration: flic_ble
+
+    scene_1:
+      name: Scene 1
+      description: First scene in the cycle
+      selector:
+        entity:
+          domain: scene
+
+    scene_2:
+      name: Scene 2 (Optional)
+      description: Second scene in the cycle
+      default: []
+      selector:
+        entity:
+          domain: scene
+
+    scene_3:
+      name: Scene 3 (Optional)
+      description: Third scene in the cycle
+      default: []
+      selector:
+        entity:
+          domain: scene
+
+    scene_4:
+      name: Scene 4 (Optional)
+      description: Fourth scene in the cycle
+      default: []
+      selector:
+        entity:
+          domain: scene
+
+    enable_double_press:
+      name: Enable Double Press - Favorite Scene
+      description: Activate favorite scene on double press
+      default: false
+      selector:
+        boolean:
+
+    favorite_scene:
+      name: Favorite Scene
+      description: Scene to activate on double press
+      default: []
+      selector:
+        entity:
+          domain: scene
+
+    enable_long_press_off:
+      name: Enable Long Press - Turn Off
+      description: Turn off lights on long press
+      default: true
+      selector:
+        boolean:
+
+    off_target:
+      name: Lights/Switches to Turn Off
+      description: Entities to turn off on long press
+      default: []
+      selector:
+        target:
+          entity:
+            domain:
+              - light
+              - switch
+
+variables:
+  scene_list: |
+    {% set scenes = [scene_1] %}
+    {% if scene_2 is defined and scene_2 | length > 0 %}
+      {% set scenes = scenes + [scene_2] %}
+    {% endif %}
+    {% if scene_3 is defined and scene_3 | length > 0 %}
+      {% set scenes = scenes + [scene_3] %}
+    {% endif %}
+    {% if scene_4 is defined and scene_4 | length > 0 %}
+      {% set scenes = scenes + [scene_4] %}
+    {% endif %}
+    {{ scenes }}
+  scene_count: "{{ scene_list | count }}"
+  current_index: "{{ state_attr(this.entity_id, 'current_index') | default(0) | int }}"
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_short_press
+    id: cycle
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_double_press
+    id: favorite
+    enabled: !input enable_double_press
+
+  - platform: device
+    domain: flic_ble
+    device_id: !input flic_button
+    type: button_long_press
+    id: turn_off
+    enabled: !input enable_long_press_off
+
+action:
+  - choose:
+      # Cycle through scenes
+      - conditions:
+          - condition: trigger
+            id: cycle
+        sequence:
+          - variables:
+              next_index: "{{ (current_index + 1) % scene_count }}"
+              next_scene: "{{ scene_list[next_index] }}"
+
+          - service: scene.turn_on
+            target:
+              entity_id: "{{ next_scene }}"
+
+          - service: automation.update_entity
+            data:
+              entity_id: !input flic_button
+              attributes:
+                current_index: "{{ next_index }}"
+
+      # Favorite scene
+      - conditions:
+          - condition: trigger
+            id: favorite
+        sequence:
+          - service: scene.turn_on
+            target:
+              entity_id: !input favorite_scene
+
+      # Turn off
+      - conditions:
+          - condition: trigger
+            id: turn_off
+        sequence:
+          - service: homeassistant.turn_off
+            target: !input off_target
