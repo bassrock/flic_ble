@@ -1,9 +1,5 @@
 {
-  "name": "Flic Button BLE",
-  "content_in_root": false,
-  "filename": "flic_ble",
+  "name": "Flic 2 BLE",
   "render_readme": true,
-  "homeassistant": "2023.8.0",
-  "country": ["US", "GB", "DE", "FR", "CA", "AU", "NL", "SE", "NO", "DK", "FI", "BE", "AT", "CH"],
-  "domains": ["binary_sensor", "event", "sensor"]
+  "homeassistant": "2024.1.0"
 }

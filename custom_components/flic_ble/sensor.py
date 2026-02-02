@@ -1,8 +1,6 @@
-"""Sensor platform for Flic BLE integration."""
-from __future__ import annotations
+"""Sensor entity for Flic 2 BLE integration."""
 
-import logging
-from typing import TYPE_CHECKING
+from __future__ import annotations
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -10,161 +8,63 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    PERCENTAGE,
-    SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
-    UnitOfElectricPotential,
-)
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import EntityCategory
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.const import PERCENTAGE
+from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import DOMAIN, MANUFACTURER, MODEL_NAME
-from .models import FlicData
+from .const import SIGNAL_BATTERY_UPDATE
+from .coordinator import Flic2Coordinator, FlicConfigEntry
+from .entity import Flic2Entity
 
-if TYPE_CHECKING:
-    from homeassistant.components.bluetooth.active_update_processor import (
-        ActiveBluetoothProcessorCoordinator,
-    )
-
-_LOGGER = logging.getLogger(__name__)
-
-# Sensor entity descriptions
-SENSOR_TYPES: tuple[SensorEntityDescription, ...] = (
-    SensorEntityDescription(
-        key="battery_level",
-        name="Battery",
-        device_class=SensorDeviceClass.BATTERY,
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=None,  # Primary sensor
-    ),
-    SensorEntityDescription(
-        key="battery_voltage",
-        name="Battery Voltage",
-        device_class=SensorDeviceClass.VOLTAGE,
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-        entity_registry_enabled_default=False,  # Disabled by default
-    ),
-    SensorEntityDescription(
-        key="rssi",
-        name="Signal Strength",
-        device_class=SensorDeviceClass.SIGNAL_STRENGTH,
-        native_unit_of_measurement=SIGNAL_STRENGTH_DECIBELS_MILLIWATT,
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
+BATTERY_DESCRIPTION = SensorEntityDescription(
+    key="battery",
+    translation_key="battery",
+    device_class=SensorDeviceClass.BATTERY,
+    state_class=SensorStateClass.MEASUREMENT,
+    native_unit_of_measurement=PERCENTAGE,
 )
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
-    async_add_entities: AddEntitiesCallback,
+    entry: FlicConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up Flic sensors from a config entry.
-
-    Args:
-        hass: Home Assistant instance
-        entry: Config entry
-        async_add_entities: Callback to add entities
-    """
-    entry_data: dict = hass.data[DOMAIN][entry.entry_id]
-
-    entities = []
-    for device_address, data in entry_data.items():
-        if isinstance(data, FlicData):
-            # Create all sensor entities for this device
-            for description in SENSOR_TYPES:
-                entities.append(
-                    FlicSensor(
-                        coordinator=data.coordinator,
-                        device_address=device_address,
-                        description=description,
-                        entry_title=entry.title,
-                    )
-                )
-
-    async_add_entities(entities)
-    _LOGGER.debug("Added %d Flic sensors", len(entities))
+    """Set up Flic 2 battery sensor from a config entry."""
+    coordinator = entry.runtime_data
+    async_add_entities([Flic2BatterySensor(coordinator)])
 
 
-class FlicSensor(CoordinatorEntity, SensorEntity):
-    """Sensor entity for Flic button."""
+class Flic2BatterySensor(Flic2Entity, SensorEntity):
+    """Representation of a Flic 2 battery sensor."""
 
-    _attr_has_entity_name = True
+    entity_description = BATTERY_DESCRIPTION
 
-    def __init__(
-        self,
-        coordinator: ActiveBluetoothProcessorCoordinator,
-        device_address: str,
-        description: SensorEntityDescription,
-        entry_title: str,
-    ) -> None:
-        """Initialize the sensor.
-
-        Args:
-            coordinator: ActiveBluetoothProcessorCoordinator instance
-            device_address: Bluetooth address of the button
-            description: SensorEntityDescription
-            entry_title: Title from config entry
-        """
+    def __init__(self, coordinator: Flic2Coordinator) -> None:
+        """Initialize the battery sensor."""
         super().__init__(coordinator)
-        self.entity_description = description
+        self._attr_unique_id = f"{coordinator.button_uuid}_battery"
 
-        # Set unique ID
-        self._attr_unique_id = f"{device_address}_{description.key}"
+    @property
+    def native_value(self) -> int | None:
+        """Return the battery level."""
+        return self.coordinator.battery_level
 
-        # Set device info
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, device_address)},
-            name=entry_title,
-            manufacturer=MANUFACTURER,
-            model=MODEL_NAME,
-            connections={("bluetooth", device_address)},
+    async def async_added_to_hass(self) -> None:
+        """Subscribe to battery updates when entity is added."""
+        await super().async_added_to_hass()
+
+        # Subscribe to battery updates
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                f"{SIGNAL_BATTERY_UPDATE}_{self.coordinator.address}",
+                self._handle_battery_update,
+            )
         )
 
-        self._device_address = device_address
-
-    @property
-    def native_value(self) -> float | int | None:
-        """Return the sensor value.
-
-        Returns:
-            Sensor value or None if not available
-        """
-        if not self.coordinator.data:
-            return None
-
-        return self.coordinator.data.get(self.entity_description.key)
-
-    @property
-    def available(self) -> bool:
-        """Return if entity is available.
-
-        Returns:
-            True if sensor data is available
-        """
-        if not self.coordinator.last_update_success:
-            return False
-
-        # Battery sensors require battery data
-        if self.entity_description.key in ("battery_level", "battery_voltage"):
-            return (
-                self.coordinator.data is not None
-                and self.coordinator.data.get(self.entity_description.key) is not None
-            )
-
-        # RSSI requires data
-        if self.entity_description.key == "rssi":
-            return (
-                self.coordinator.data is not None
-                and self.coordinator.data.get("rssi") is not None
-            )
-
-        return True
+    @callback
+    def _handle_battery_update(self, level: int) -> None:
+        """Handle battery level update."""
+        self.async_write_ha_state()
